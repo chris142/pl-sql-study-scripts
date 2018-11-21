@@ -1,0 +1,160 @@
+-- EXPLICIT CURSOR
+
+DECLARE
+  TYPE emp_rec IS RECORD
+  (
+  v_emp_id employees.employee_id%TYPE,
+  v_f_name employees.first_name%TYPE,
+  v_l_name employees.last_name%TYPE,
+  v_email employees.email%TYPE
+  );
+
+  TYPE emp_list_tab IS TABLE OF emp_rec INDEX BY PLS_INTEGER;
+  some_people  emp_list_tab;
+  CURSOR cur_emp IS
+    SELECT EMPLOYEES.employee_id, EMPLOYEES.first_name, EMPLOYEES.last_name, EMPLOYEES.email FROM EMPLOYEES;
+  v_i          NUMBER;
+  v_n          NUMBER;
+  c_length     NUMBER;
+  table_length NUMBER;
+    ex_custom EXCEPTION;
+
+BEGIN
+  v_i := 1;
+  IF NOT cur_emp%ISOPEN
+  THEN
+    OPEN cur_emp;
+  END IF;
+
+  -- finding the length of the table
+  -- to implement an exception
+  FOR i IN (SELECT count(*) c_length from EMPLOYEES)
+  LOOP
+    table_length := i.c_length;
+  END LOOP;
+
+
+  IF :v_n <= table_length
+  THEN
+    LOOP
+      FETCH cur_emp INTO some_people(v_i);
+      EXIT WHEN cur_emp%ROWCOUNT > :v_n		 -- variable from user
+                --:v_n / 0
+                --:v_n
+
+                OR cur_emp%NOTFOUND;
+      DBMS_OUTPUT.put_line(to_char(some_people(v_i).v_emp_id) || ' ' ||
+                           to_char(some_people(v_i).v_f_name) || ' ' ||
+                           to_char(some_people(v_i).v_l_name) || ' ' ||
+                           to_char(some_people(v_i).v_email));
+      v_i := v_i + 1;
+    END LOOP;
+  ELSE
+    RAISE
+    ex_custom;
+  END IF;
+
+  EXCEPTION
+
+  WHEN ZERO_DIVIDE
+  THEN
+    DBMS_OUTPUT.put_line('You are trying to divide by zero');
+
+  WHEN NO_DATA_FOUND
+  THEN
+    DBMS_OUTPUT.put_line('Check the source');
+
+  WHEN PROGRAM_ERROR
+  THEN
+    DBMS_OUTPUT.put_line('Internal problem of PL/SQL');
+
+  WHEN ex_custom
+  THEN DBMS_OUTPUT.put_line('The number is too big');
+
+  WHEN OTHERS
+  THEN -- handles all other errors
+    DBMS_OUTPUT.put_line('Some other kind of error occurred');
+
+END;
+
+
+
+
+-- IMPLICIT CURSOR
+
+DECLARE
+  TYPE emp_rec IS RECORD
+  (
+  v_emp_id employees.employee_id%TYPE,
+  v_f_name employees.first_name%TYPE,
+  v_l_name employees.last_name%TYPE,
+  v_email employees.email%TYPE
+  );
+
+  TYPE emp_list_tab IS TABLE OF emp_rec INDEX BY PLS_INTEGER;
+  some_people  emp_list_tab;
+
+  v_i          NUMBER;
+  v_n          NUMBER;
+  c_length     NUMBER;
+  table_length NUMBER;
+    ex_custom EXCEPTION;
+
+BEGIN
+  v_i := 1;
+
+  -- finding the length of the table
+  -- to implement an exception
+  FOR i IN (SELECT count(*) c_length from EMPLOYEES)
+  LOOP
+    table_length := i.c_length;
+  END LOOP;
+
+  FOR i IN (SELECT EMPLOYEES.employee_id, EMPLOYEES.first_name, EMPLOYEES.last_name, EMPLOYEES.email
+            FROM EMPLOYEES)
+  LOOP
+    some_people(v_i).v_emp_id := i.employee_id;
+    some_people(v_i).v_f_name := i.first_name;
+    some_people(v_i).v_l_name := i.last_name;
+    some_people(v_i).v_email := i.email;
+    v_i := v_i + 1;
+  END LOOP;
+
+
+  IF :v_n <= table_length
+  THEN
+
+    FOR k IN 1..:v_n -- variable from user
+    LOOP
+      DBMS_OUTPUT.put_line(to_char(some_people(k).v_emp_id) || ' ' ||
+                           to_char(some_people(k).v_f_name) || ' ' ||
+                           to_char(some_people(k).v_l_name) || ' ' ||
+                           to_char(some_people(k).v_email));
+    END LOOP;
+  ELSE
+    RAISE
+    ex_custom;
+  END IF;
+
+  EXCEPTION
+
+  WHEN ZERO_DIVIDE
+  THEN
+    DBMS_OUTPUT.put_line('You are trying to divide by zero');
+
+  WHEN NO_DATA_FOUND
+  THEN
+    DBMS_OUTPUT.put_line('Check the source');
+
+  WHEN PROGRAM_ERROR
+  THEN
+    DBMS_OUTPUT.put_line('Internal problem of PL/SQL');
+
+  WHEN ex_custom
+  THEN DBMS_OUTPUT.put_line('The number is too big');
+
+  WHEN OTHERS
+  THEN -- handles all other errors
+    DBMS_OUTPUT.put_line('Some other kind of error occurred');
+
+END;
