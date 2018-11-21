@@ -1,0 +1,85 @@
+CREATE OR REPLACE PACKAGE emp_pack
+IS
+--   TYPE emp_rec IS RECORD
+--   (
+--   v_emp_id employees.employee_id%TYPE,
+--   v_f_name employees.first_name%TYPE,
+--   v_l_name employees.last_name%TYPE
+--   );
+  TYPE emp_table_type IS TABLE OF employees%ROWTYPE
+ -- TYPE emp_table_type IS TABLE OF emp_rec
+  INDEX BY PLS_INTEGER;
+  FUNCTION get_emp_table_func(v_limit IN INTEGER)
+    RETURN emp_table_type;
+ PROCEDURE display_emp_table_proc(arr_emp1 IN emp_table_type);
+END emp_pack;
+/
+
+CREATE OR REPLACE PACKAGE BODY emp_pack
+IS
+  v_user INTEGER;
+
+  FUNCTION get_emp_table_func(v_limit IN INTEGER)
+    RETURN emp_table_type
+  IS
+    v_i     INTEGER := 0;
+    arr_emp emp_table_type;
+    BEGIN
+      FOR i IN
+      (
+      SELECT * FROM employees e WHERE ROWNUM <= v_limit
+      )
+      LOOP
+        v_i := v_i + 1;
+        arr_emp(v_i) := i;
+      END LOOP;
+      RETURN (arr_emp);
+    END;
+
+  PROCEDURE display_emp_table_proc(arr_emp1 IN emp_table_type)
+  IS
+    BEGIN
+      FOR i IN 1 ..  arr_emp1.COUNT
+      LOOP
+        DBMS_OUTPUT.PUT_LINE
+        (
+            arr_emp1(i).employee_id || ' ' ||
+            arr_emp1(i).first_name  || ' ' ||
+            arr_emp1(i).last_name  || ' ' ||
+            arr_emp1(i).email  || ' ' ||
+            arr_emp1(i).phone_number  || ' ' ||
+            arr_emp1(i).job_id
+        );
+      END LOOP;
+    END display_emp_table_proc;
+END emp_pack;
+/
+
+DECLARE
+  v_count      INTEGER := :v_limit_user;
+  table_length INTEGER;
+    ex_var_big EXCEPTION;
+
+BEGIN
+
+  FOR i IN (SELECT count(*) c_length from EMPLOYEES)
+    LOOP
+      table_length := i.c_length;
+    END LOOP;
+  IF v_count > table_length
+    THEN RAISE
+    ex_var_big;
+    END IF;
+ -- my_array := emp_pack.get_emp_table_func(v_count);
+  emp_pack.display_emp_table_proc(emp_pack.get_emp_table_func(v_count));
+
+  EXCEPTION
+    WHEN NO_DATA_FOUND
+    THEN DBMS_OUTPUT.PUT_LINE('The Table is Empty');
+    WHEN ex_var_big
+    THEN DBMS_OUTPUT.put_line('The number is too big');
+   WHEN OTHERS
+   THEN DBMS_OUTPUT.put_line('Some other kind of error occurred');
+
+END;
+/
