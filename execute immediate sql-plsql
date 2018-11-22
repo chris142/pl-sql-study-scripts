@@ -1,0 +1,41 @@
+--SQL
+CREATE OR REPLACE FUNCTION get_emp_name(v_emp_id IN INTEGER)
+  RETURN varchar2
+IS
+  v_i varchar2(30);
+  BEGIN
+    EXECUTE IMMEDIATE
+    'SELECT e.first_name
+     FROM employees e
+     WHERE e.employee_id = :v_emp_id'
+    INTO v_i
+    USING v_emp_id;
+    RETURN (v_i);
+  END;
+/
+
+--PL/SQL
+CREATE OR REPLACE FUNCTION get_emp_name_another_way(v_emp_id INTEGER)
+  RETURN varchar2
+IS
+  v_i varchar2(30);
+  BEGIN
+    EXECUTE IMMEDIATE
+    'BEGIN
+      SELECT e.first_name
+      INTO :vi
+      FROM employees e
+      WHERE e.employee_id = :empid;
+    END;'
+    USING OUT v_i, IN v_emp_id;
+    RETURN (v_i);
+  END;
+/
+
+DECLARE
+  v_emp_id INTEGER := 100;
+BEGIN
+  DBMS_OUTPUT.put_line(get_emp_name(v_emp_id));
+  DBMS_OUTPUT.put_line(get_emp_name_another_way(v_emp_id));
+END;
+/
