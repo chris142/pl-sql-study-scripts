@@ -1,0 +1,33 @@
+CREATE OR REPLACE PROCEDURE get_tab_name_rows
+IS
+  v_cur_id INTEGER;
+  v_i      INTEGER;
+  ignore   INTEGER;
+  v_num    dbms_sql.number_table;
+  v_name   dbms_sql.varchar2_table;
+  BEGIN
+    v_cur_id := DBMS_SQL.OPEN_CURSOR;
+
+    DBMS_SQL.PARSE(v_cur_id,
+                   'select NUM_ROWS, TABLE_NAME from user_tables where ROWNUM < 50 order by NUM_ROWS desc',
+                   DBMS_SQL.NATIVE);
+    DBMS_SQL.define_array(v_cur_id, 1, v_num, 100, 1);
+    DBMS_SQL.define_array(v_cur_id, 2, v_name, 100, 1);
+    ignore := DBMS_SQL.EXECUTE(v_cur_id);
+    v_i := DBMS_SQL.fetch_rows(v_cur_id);
+    DBMS_SQL.column_value(v_cur_id, 1, v_num);
+    DBMS_SQL.column_value(v_cur_id, 2, v_name);
+
+    FOR i in 1..v_num.COUNT
+    LOOP
+      DBMS_OUTPUT.PUT_LINE('Table ' || v_name(i) || ' contains ' || v_num(i) || ' rows');
+    END LOOP;
+    DBMS_SQL.CLOSE_CURSOR(v_cur_id);
+  END;
+/
+
+
+BEGIN
+  get_tab_name_rows;
+END;
+/
