@@ -1,0 +1,94 @@
+
+
+create materialized view SALARY_by_departments_def
+  BUILD DEFERRED
+  REFRESH FORCE
+  ON DEMAND
+  AS
+
+    select * from hr.employees;
+
+
+select * from SALARY_by_departments_def;
+
+BEGIN
+DBMS_mview.refresh(list => 'SALARY_BY_DEPARTMENTS_DEF', method => 'C');
+END;
+
+
+BEGIN
+    DBMS_mview.refresh('SALARY_BY_DEPARTMENTS_DEF');
+    DBMS_SNAPSHOT.REFRESH( 'SALARY_BY_DEPARTMENTS_DEF','C');
+END;
+
+
+  create materialized view SAL_3
+  BUILD IMMEDIATE
+  REFRESH FORCE
+  ON COMMIT
+  AS
+    select * from EMPLOYEES;
+
+
+
+select * from SAL_3;
+CREATE TABLE salary_by_dep
+  AS
+  select
+         d.department_name AS department_name,
+         sum(e.salary) AS salary
+  FROM
+       employees e
+JOIN
+  (
+      select * FROM departments
+    where ROWNUM <= 5
+   ) d
+    ON e.department_id = d.department_id
+  group by d.department_name;
+
+select * from salary_by_dep;
+
+CREATE MATERIALIZED VIEW salary_by_dep
+  ON PREBUILT TABLE WITH REDUCED PRECISION
+ -- ENABLE QUERY REWRITE
+  AS
+    select
+         d.department_name AS department_name,
+         sum(e.salary) AS salary
+  FROM
+       employees e
+JOIN
+  (
+      select * FROM departments
+    where ROWNUM <= 5
+   ) d
+    ON e.department_id = d.department_id
+  group by d.department_name;
+
+
+alter materialized view salary_by_dep ENABLE QUERY REWRITE;
+
+CREATE MATERIALIZED VIEW LOG ON employees
+WITH PRIMARY KEY, ROWID, SEQUENCE(department_id, salary)
+INCLUDING NEW VALUES;
+
+CREATE MATERIALIZED VIEW LOG ON departments
+WITH PRIMARY KEY, ROWID, SEQUENCE(department_name)
+INCLUDING NEW VALUES;
+
+
+select * from MLOG$_employees;
+
+
+INSERT INTO EMPLOYEES
+VALUES (1000, 'TEST', 'TEST','TEST','TEST',trunc(sysdate),'IT_PROG', 999, null, 100, 50);
+commit;
+
+select * from SAL_3;
+
+
+
+
+
+select rownum from dual connect by level <= 10;
