@@ -1,0 +1,383 @@
+
+-- I did`n understand, how to connect ERROR_CODE and FIVE TYPES given
+-- Google found terrifying page with log4j Data Processing logger
+-- And, as questions are not allowed, I made constraint on table and then
+-- wrote some test cases in procedure
+
+
+CREATE TABLE error_log_table
+(
+  err_tmstp TIMESTAMP NOT NULL,
+  err_type  VARCHAR2(10),
+  err_code  INTEGER NOT NULL,
+  err_msg   VARCHAR2(512),
+  err_place VARCHAR2(200),
+  err_trace VARCHAR2(300),
+  CONSTRAINT ck_err_type CHECK (err_type IN ('DEBUG','INFO','WARNING', 'ERROR', 'FATAL'))
+);
+
+--drop table error_log_table;
+
+CREATE OR REPLACE PACKAGE err_pkg
+IS
+  PROCEDURE write_log
+    (
+      err_code  IN INTEGER,
+      err_msg   IN VARCHAR2,
+      err_place IN VARCHAR2,
+      err_trace IN VARCHAR2
+    );
+END err_pkg;
+/
+
+
+CREATE OR REPLACE PACKAGE BODY err_pkg
+IS
+  PROCEDURE write_log
+    (
+      err_code  IN INTEGER,
+      err_msg   IN VARCHAR2,
+      err_place IN VARCHAR2,
+      err_trace IN VARCHAR2
+    )
+  IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    v_err_type VARCHAR2(10);
+    BEGIN
+      CASE
+        WHEN err_code IN (-6511, -6561)
+        THEN v_err_type := 'DEBUG';
+        WHEN err_code IN (-6519, -6548)
+        THEN v_err_type := 'WARNING';
+        WHEN err_code IN (-6540)
+        THEN v_err_type := 'FATAL';
+        WHEN err_code IN (-962)
+        THEN v_err_type := 'INFO';
+      ELSE v_err_type := 'ERROR';
+      END CASE;
+
+      INSERT INTO error_log_table
+      VALUES (SYSTIMESTAMP, v_err_type, err_code, SUBSTR(err_msg, 1, 512), err_place, err_trace);
+      COMMIT;
+      EXCEPTION
+      WHEN OTHERS
+      THEN ROLLBACK;
+    END write_log;
+END err_pkg;
+/
+
+
+
+CREATE OR REPLACE PACKAGE emp_pkg
+IS
+
+  TYPE emp_table_type IS TABLE OF employees%ROWTYPE
+  INDEX BY PLS_INTEGER;
+  TYPE var_type IS VARRAY (20) OF INTEGER;
+
+  PROCEDURE drop_table(v_tab_name IN VARCHAR2);
+  PROCEDURE drop_table_xx;
+  PROCEDURE create_table(v_tab_name IN VARCHAR2);
+  PROCEDURE create_table_xx;
+  FUNCTION get_dep_ids
+    RETURN var_type;
+  FUNCTION get_emp_table(dep_id IN INTEGER)
+    RETURN emp_table_type;
+  PROCEDURE fill_table(dep_id IN INTEGER, emp_mas_id1 IN emp_table_type, num_rows OUT INTEGER);
+  PROCEDURE fill_table_xx;
+END emp_pkg;
+/
+
+CREATE OR REPLACE PACKAGE BODY emp_pkg
+IS
+
+  FUNCTION get_dep_ids
+    RETURN var_type
+  IS
+    var_dep_ids var_type := var_type();
+    cursor cur_dep_is is
+      select department_id
+      from employees
+      where department_id is not null
+      group by department_id;
+    BEGIN
+      var_dep_ids.extend();
+      open cur_dep_is;
+      fetch cur_dep_is bulk collect into var_dep_ids;
+      close cur_dep_is;
+      RETURN (var_dep_ids);
+      EXCEPTION
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'FUNCTION get_dep_ids',
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+      RAISE;
+    END get_dep_ids;
+
+
+  PROCEDURE create_table(v_tab_name IN VARCHAR2)
+  IS
+      table_already_exists EXCEPTION;
+    PRAGMA EXCEPTION_INIT (table_already_exists, -955);
+    BEGIN
+      EXECUTE IMMEDIATE
+      'CREATE TABLE ' || v_tab_name ||
+      ' AS SELECT E.EMPLOYEE_ID xx_id, E.*
+          FROM EMPLOYEES E
+          WHERE 1 = 2';
+      EXECUTE IMMEDIATE
+        'ALTER TABLE ' || v_tab_name ||
+          ' ADD CONSTRAINT ' || v_tab_name || '_constraint UNIQUE (xx_id)';
+
+      EXCEPTION
+      WHEN table_already_exists
+      THEN NULL;
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'PROCEDURE create_table ' || v_tab_name,
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+      RAISE;
+    END create_table;
+
+
+  PROCEDURE create_table_xx
+  IS
+    var_id        var_type := var_type();
+    table_name_xx varchar2(30);
+    BEGIN
+      var_id.extend();
+      var_id := get_dep_ids;
+      FOR i IN var_id.FIRST .. var_id.LAST
+      LOOP
+        table_name_xx := 'employees_' || var_id(i);
+        create_table(table_name_xx);
+        dbms_output.put_line('Table ' || table_name_xx || ' created.');
+      END LOOP;
+    EXCEPTION
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'PROCEDURE create_table_xx',
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+      RAISE;
+    END create_table_xx;
+
+
+  PROCEDURE drop_table(v_tab_name IN VARCHAR2)
+  IS
+    BEGIN
+      EXECUTE IMMEDIATE
+      'DROP TABLE ' || v_tab_name;
+      EXCEPTION
+      WHEN OTHERS
+      THEN
+        -- work with many tables
+        -- so silence slight error
+        -- when some of them are already dropped
+        IF SQLCODE = -942
+        THEN
+          NULL;
+          ELSE err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'PROCEDURE drop_table '|| v_tab_name,
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+        -- raise only if smth unexpected happens
+        RAISE;
+        END IF;
+    END drop_table;
+
+  PROCEDURE drop_table_xx
+  IS
+    var_id        var_type := var_type();
+    table_name_xx varchar2(30);
+    BEGIN
+      var_id.extend();
+      var_id := get_dep_ids;
+      FOR i IN var_id.FIRST .. var_id.LAST
+      LOOP
+        table_name_xx := 'employees_' || var_id(i);
+        drop_table(table_name_xx);
+        dbms_output.put_line('Table ' || table_name_xx || ' dropped.');
+      END LOOP;
+       EXCEPTION
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'PROCEDURE drop_table_xx',
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+      RAISE;
+    END drop_table_xx;
+
+
+  FUNCTION get_emp_table(dep_id IN INTEGER)
+    RETURN emp_table_type
+  IS
+    v_i     INTEGER := 0;
+    arr_emp emp_table_type;
+    cursor cur_tab_id is SELECT *
+                         FROM employees e
+                         WHERE (e.department_id = dep_id)
+                            or (e.department_id is null);
+    BEGIN
+      OPEN cur_tab_id;
+      FETCH cur_tab_id bulk collect into arr_emp;
+      CLOSE cur_tab_id;
+      RETURN (arr_emp);
+       EXCEPTION
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'FUNCTION get_emp_table',
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+      RAISE;
+    END;
+
+  PROCEDURE fill_table(dep_id IN INTEGER, emp_mas_id1 IN emp_table_type, num_rows OUT INTEGER)
+  IS
+    table_name_xx VARCHAR2(30);
+    v_id          INTEGER DEFAULT 1;
+    BEGIN
+      table_name_xx := 'employees_' || dep_id;
+
+      -- I wanted to create a procedure which is afraid of errors and data loss
+      -- It tried to insert again and again
+
+      --  FOR j IN 1..3 -- try 3 times
+      --  LOOP
+      --  BEGIN -- sub-block
+      --    SAVEPOINT start_transaction;
+      FOR i IN 1 .. emp_mas_id1.COUNT
+      LOOP
+        IF (emp_mas_id1(i).department_id = dep_id) or (emp_mas_id1(i).department_id is null)
+        THEN
+          -- here was FORALL i in 1..emp_mas_id1.COUNT
+          -- insert into table_name_xx VALUES emp_mas_id1(i);
+          -- BUT SOMETHING WENT WRONG with bind variables and dynamic table_name passing
+          -- SO I had to write it in such way
+
+          -- I think U don`t like it :)
+
+          EXECUTE IMMEDIATE
+          'INSERT INTO ' || table_name_xx || ' VALUES
+   (:vid,
+    :id , ''' || emp_mas_id1(i).first_name || '''
+   , ''' || emp_mas_id1(i).last_name || '''
+   , ''' || emp_mas_id1(i).email || '''
+   , ''' || emp_mas_id1(i).phone_number || '''
+   , TO_DATE(''' || emp_mas_id1(i).hire_date || ''', ''dd-MON-yyyy'')
+   , ''' || emp_mas_id1(i).job_id || '''
+   , :salary
+   , case when ' || nvl(emp_mas_id1(i).commission_pct, -100) || ' = -100 then null else ' ||
+          nvl(emp_mas_id1(i).commission_pct, -100) || ' end
+   , case when ' || nvl(emp_mas_id1(i).manager_id, -100) || ' = -100 then null else ' ||
+          nvl(emp_mas_id1(i).manager_id, -100) || ' end
+   , case when ' || nvl(emp_mas_id1(i).department_id, -100) || ' = -100 then null else ' ||
+          nvl(emp_mas_id1(i).department_id, -100) || ' end
+   )'
+          USING v_id, emp_mas_id1(i).employee_id, emp_mas_id1(i).salary;
+          v_id := v_id + 1;
+        END IF;
+      END LOOP;
+      COMMIT;
+      --  EXIT;
+      --  EXCEPTION
+      --    WHEN DUP_VAL_ON_INDEX
+      --    THEN ROLLBACK TO start_transaction; -- undo half-insertion
+      --      v_id := v_id + 1; -- attempt to fix
+      --   END; -- end sub-block
+      --   END LOOP;
+
+      num_rows := emp_mas_id1.COUNT;
+      EXCEPTION
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'PROCEDURE fill_table ' || table_name_xx,
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+        ROLLBACK;
+        RAISE;
+
+      --       EXCEPTION
+      --    WHEN OTHERS
+      --    THEN
+      --       IF SQLCODE = -24381
+      --       THEN
+      --          FOR i IN 1 .. SQL%BULK_EXCEPTIONS.COUNT
+      --          LOOP
+      --             DBMS_OUTPUT.put_line (
+      --                   SQL%BULK_EXCEPTIONS (i).ERROR_INDEX
+      --                || ':'
+      --                || SQL%BULK_EXCEPTIONS (i).ERROR_CODE);
+      --          END LOOP;
+      --       ELSE
+      --          RAISE;
+      --       END IF;
+    END fill_table;
+
+
+  PROCEDURE fill_table_xx
+  IS
+    v_num         INTEGER DEFAULT 0;
+    var_id        var_type := var_type();
+    table_name_xx varchar2(30);
+    mass          emp_table_type;
+    BEGIN
+      var_id.extend();
+      var_id := get_dep_ids;
+      FOR i IN var_id.FIRST .. var_id.LAST
+      LOOP
+        table_name_xx := 'employees_' || var_id(i);
+        mass := get_emp_table(var_id(i));
+        fill_table(var_id(i), mass, v_num);
+        dbms_output.put_line('Table ' || table_name_xx || ' filled. ' || v_num || ' rows added.');
+      END LOOP;
+       EXCEPTION
+      WHEN OTHERS
+      THEN err_pkg.write_log
+      (
+          SQLCODE,
+          SQLERRM,
+          'PROCEDURE fill_table_xx',
+          DBMS_UTILITY.FORMAT_ERROR_BACKTRACE
+      );
+        ROLLBACK;
+      RAISE;
+    END fill_table_xx;
+
+end emp_pkg;
+/
+
+
+BEGIN
+  emp_pkg.drop_table_xx;
+  emp_pkg.create_table_xx;
+  emp_pkg.fill_table_xx;
+
+-- EXCEPTION
+-- WHEN OTHERS
+-- THEN err_pkg.write_log(SQLCODE, SQLERRM, 'Main Block', DBMS_UTILITY.FORMAT_ERROR_BACKTRACE);
+END;
+/
